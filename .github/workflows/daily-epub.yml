@@ -1,0 +1,42 @@
+name: Daily EPUB
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 4 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests ausführen
+        run: python -m unittest discover -s tests -v
+
+      - name: Tagesausgabe erzeugen
+        run: python src/generate.py --config config.json --output dist/dailydigest.epub
+
+      - name: EPUB-Struktur prüfen
+        run: python -m zipfile --test dist/dailydigest.epub
+
+      - name: Ausgabe bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: xteink-dailydigest
+          path: |
+            dist/dailydigest.epub
+            dist/latest.json
+          if-no-files-found: error
+          retention-days: 7
