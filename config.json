@@ -1,0 +1,39 @@
+{
+  "title": "Mein Morgenblatt",
+  "location": {
+    "name": "Wetter (Ruhr)",
+    "latitude": 51.3875,
+    "longitude": 7.3928,
+    "timezone": "Europe/Berlin"
+  },
+  "news": {
+    "max_items": 6,
+    "feeds": [
+      {
+        "name": "tagesschau.de",
+        "url": "https://www.tagesschau.de/xml/rss2/"
+      },
+      {
+        "name": "tagesschau Wissen",
+        "url": "https://www.tagesschau.de/wissen/index~rss2.xml"
+      }
+    ]
+  },
+  "calendar": {
+    "mode": "demo",
+    "appointments": [
+      {
+        "time": "08:15",
+        "title": "Unterrichtsmaterial vorbereiten"
+      },
+      {
+        "time": "10:30",
+        "title": "SRL-Projektbesprechung"
+      },
+      {
+        "time": "15:00",
+        "title": "Lernkarten überarbeiten"
+      }
+    ]
+  }
+}
