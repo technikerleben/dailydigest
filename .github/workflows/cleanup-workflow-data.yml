@@ -1,0 +1,48 @@
+name: Alte Workflow-Daten löschen
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 5 * * *"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Workflow-Läufe nach sieben Tagen löschen
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const retentionDays = 7;
+            const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                status: "completed",
+                per_page: 100
+              }
+            );
+
+            const expiredRuns = runs.filter(run =>
+              run.id !== context.runId && new Date(run.created_at) < cutoff
+            );
+
+            core.info(`${expiredRuns.length} Workflow-Läufe werden gelöscht.`);
+
+            for (const run of expiredRuns) {
+              core.info(`Lösche Lauf #${run.run_number} vom ${run.created_at}`);
+              await github.rest.actions.deleteWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+            }
