@@ -8,6 +8,7 @@
   },
   "news": {
     "max_items": 6,
+    "summary_length": 700,
     "feeds": [
       {
         "name": "tagesschau.de",
