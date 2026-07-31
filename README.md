@@ -5,7 +5,7 @@ Dieses Projekt erzeugt jeden Morgen automatisch eine kompakte EPUB-Ausgabe für 
 Die aktuelle Grundversion enthält:
 
 - Wetter für Wetter (Ruhr) über Open-Meteo
-- aktuelle Schlagzeilen aus offiziellen RSS-Feeds
+- ausführlichere Nachrichtenanrisse aus offiziellen RSS-Feeds
 - klar gekennzeichnete Demo-Termine
 - ein reduziertes, Xteink-freundliches EPUB-Layout
 - einen täglichen GitHub-Actions-Lauf und einen manuellen Startknopf
@@ -35,4 +35,4 @@ Das Repository ist aktuell öffentlich. Deshalb enthält es ausschließlich öff
 - Wetter: [Open-Meteo](https://open-meteo.com/)
 - Nachrichten: [tagesschau.de RSS](https://www.tagesschau.de/infoservices/rssfeeds)
 
-Die Nachrichten werden nur als kurze Anrisse mit sichtbarer Quellenangabe und Link zum Original ausgegeben. Die Workflow-Artefakte werden nach sieben Tagen gelöscht.
+Die Nachrichten werden als Anrisse von bis zu 700 Zeichen mit sichtbarer Quellenangabe und Link zum Original ausgegeben. Jede Meldung beginnt auf einer eigenen EPUB-Seite. Die Workflow-Artefakte werden nach sieben Tagen gelöscht.
