@@ -3,13 +3,14 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from xml.etree import ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from generate import clean_text, weather_code_text, write_epub
+from generate import clean_text, weather_code_text, write_epub, write_publication_files
 
 
 class GeneratorTests(unittest.TestCase):
@@ -30,6 +31,7 @@ class GeneratorTests(unittest.TestCase):
             "title": "Testausgabe",
             "location": {"name": "Wetter (Ruhr)"},
             "calendar": {"appointments": [{"time": "08:00", "title": "Testtermin"}]},
+            "publication": {"base_url": "https://technikerleben.github.io/dailydigest"},
         }
         weather = [{"date": "2026-07-22", "condition": "bewölkt", "maximum": 21, "minimum": 12, "rain": 40}]
         news = [
@@ -42,6 +44,7 @@ class GeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "test.epub"
             write_epub(output, config, now, weather, news)
+            write_publication_files(output.parent, config, now, weather, news, output.name)
             with zipfile.ZipFile(output) as archive:
                 self.assertEqual(archive.namelist()[0], "mimetype")
                 self.assertEqual(archive.getinfo("mimetype").compress_type, zipfile.ZIP_STORED)
@@ -49,6 +52,15 @@ class GeneratorTests(unittest.TestCase):
                 self.assertIn("OEBPS/news.xhtml", archive.namelist())
                 news_page = archive.read("OEBPS/news.xhtml").decode("utf-8")
                 self.assertEqual(news_page.count('class="seitenwechsel"'), 2)
+
+            self.assertTrue((output.parent / "index.html").exists())
+            self.assertTrue((output.parent / ".nojekyll").exists())
+            opds_path = output.parent / "opds.xml"
+            self.assertTrue(opds_path.exists())
+            ET.parse(opds_path)
+            opds_text = opds_path.read_text(encoding="utf-8")
+            self.assertIn("http://opds-spec.org/acquisition/open-access", opds_text)
+            self.assertIn("dailydigest.epub", opds_text)
 
 
 if __name__ == "__main__":
