@@ -60,7 +60,7 @@ class GeneratorTests(unittest.TestCase):
             ET.parse(opds_path)
             opds_text = opds_path.read_text(encoding="utf-8")
             self.assertIn("http://opds-spec.org/acquisition/open-access", opds_text)
-            self.assertIn("dailydigest.epub", opds_text)
+            self.assertIn("test.epub", opds_text)
 
 
 if __name__ == "__main__":
