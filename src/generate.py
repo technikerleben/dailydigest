@@ -7,7 +7,6 @@ import argparse
 import html
 import json
 import re
-import shutil
 import tempfile
 import urllib.request
 import uuid
@@ -102,7 +101,7 @@ def get_weather(location: dict) -> list[dict]:
     ]
 
 
-def clean_text(value: str | None, limit: int = 260) -> str:
+def clean_text(value: str | None, limit: int = 700) -> str:
     if not value:
         return ""
     value = html.unescape(re.sub(r"<[^>]+>", " ", value))
@@ -132,7 +131,7 @@ def first_link(element: ET.Element) -> str:
     return ""
 
 
-def parse_feed(payload: bytes, source: str) -> list[dict]:
+def parse_feed(payload: bytes, source: str, summary_limit: int = 700) -> list[dict]:
     root = ET.fromstring(payload)
     entries = [
         item
@@ -142,7 +141,7 @@ def parse_feed(payload: bytes, source: str) -> list[dict]:
     parsed = []
     for entry in entries:
         title = clean_text(first_text(entry, ("title",)), 140)
-        summary = clean_text(first_text(entry, ("description", "summary", "content")), 260)
+        summary = clean_text(first_text(entry, ("description", "summary", "content")), summary_limit)
         link = first_link(entry)
         if title and link:
             parsed.append({"title": title, "summary": summary, "link": link, "source": source})
@@ -152,9 +151,10 @@ def parse_feed(payload: bytes, source: str) -> list[dict]:
 def get_news(news_config: dict) -> list[dict]:
     collected: list[dict] = []
     seen: set[str] = set()
+    summary_limit = int(news_config.get("summary_length", 700))
     for feed in news_config.get("feeds", []):
         try:
-            entries = parse_feed(fetch_bytes(feed["url"]), feed["name"])
+            entries = parse_feed(fetch_bytes(feed["url"]), feed["name"], summary_limit)
         except Exception as exc:  # Ein einzelner Feed soll die Ausgabe nicht verhindern.
             print(f"Warnung: Feed {feed['name']} nicht erreichbar: {exc}")
             continue
@@ -227,7 +227,7 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
 
     news_blocks = []
     for index, item in enumerate(news):
-        page_class = ' class="seitenwechsel"' if index and index % 2 == 0 else ""
+        page_class = ' class="seitenwechsel"' if index else ""
         summary = f'<p>{html.escape(item["summary"])}</p>' if item["summary"] else ""
         news_blocks.append(
             f'<h2{page_class}>{html.escape(item["title"])}</h2>{summary}'
@@ -244,7 +244,7 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
         "Quellen und Hinweise",
         '<p class="kicker">Zum Tagesblatt</p><h1>Quellen und Hinweise</h1>'
         '<h2>Wetter</h2><p>Prognosedaten von Open-Meteo.</p>'
-        '<h2>Nachrichten</h2><p>Kurze Anrisse aus den konfigurierten RSS-Feeds. Die Überschriften verlinken auf die Originalmeldungen.</p>'
+        '<h2>Nachrichten</h2><p>Ausführlichere Anrisse aus den konfigurierten RSS-Feeds. Die Überschriften verlinken auf die Originalmeldungen.</p>'
         '<h2>Termine</h2><p>Die aktuelle Projektversion verwendet ausschließlich fiktive Termine.</p>',
     )
     return {
