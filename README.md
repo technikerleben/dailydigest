@@ -36,3 +36,14 @@ Das Repository ist aktuell öffentlich. Deshalb enthält es ausschließlich öff
 - Nachrichten: [tagesschau.de RSS](https://www.tagesschau.de/infoservices/rssfeeds)
 
 Die Nachrichten werden als Anrisse von bis zu 700 Zeichen mit sichtbarer Quellenangabe und Link zum Original ausgegeben. Jede Meldung beginnt auf einer eigenen EPUB-Seite. Die Workflow-Artefakte werden nach sieben Tagen gelöscht.
+
+
+## Öffentliche Bereitstellung
+
+Jeder erfolgreiche Workflow veröffentlicht die aktuelle Ausgabe zusätzlich über GitHub Pages:
+
+- Downloadseite: https://technikerleben.github.io/dailydigest/
+- EPUB: https://technikerleben.github.io/dailydigest/dailydigest.epub
+- OPDS-Katalog: https://technikerleben.github.io/dailydigest/opds.xml
+
+Auf einem von CrossPoint unterstützten Gerät kann der OPDS-Katalog einmalig unter **Settings → System → OPDS Servers** eingetragen werden. Der X4 Pro wird von CrossPoint zum Zeitpunkt dieser Einrichtung noch nicht unterstützt; bis dahin kann die feste EPUB-Adresse auf dem Smartphone geöffnet und die Datei über die Xteink-App übertragen werden.
