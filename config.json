@@ -36,5 +36,8 @@
         "title": "Lernkarten überarbeiten"
       }
     ]
+  },
+  "publication": {
+    "base_url": "https://technikerleben.github.io/dailydigest"
   }
 }
