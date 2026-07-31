@@ -305,6 +305,81 @@ def write_epub(output: Path, config: dict, now: datetime, weather: list[dict], n
                     archive.write(path, path.relative_to(root), compress_type=zipfile.ZIP_DEFLATED)
 
 
+
+def write_publication_files(
+    directory: Path,
+    config: dict,
+    now: datetime,
+    weather: list[dict],
+    news: list[dict],
+    epub_name: str,
+) -> None:
+    """Erzeugt OPDS-Katalog und Downloadseite für GitHub Pages."""
+    base_url = config["publication"]["base_url"].rstrip("/")
+    updated = now.isoformat(timespec="seconds")
+    date_text = now.strftime("%d.%m.%Y")
+    issue_title = f'{config["title"]} – {date_text}'
+    weather_text = (
+        f'{weather[0]["condition"].capitalize()}, '
+        f'{weather[0]["minimum"]} bis {weather[0]["maximum"]} °C'
+        if weather
+        else "Wetterdaten nicht verfügbar"
+    )
+    summary = f"{weather_text}. {len(news)} Nachrichtenmeldungen."
+
+    opds = f'''<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>tag:technikerleben.github.io,2026:dailydigest</id>
+  <title>{html.escape(config["title"])}</title>
+  <updated>{html.escape(updated)}</updated>
+  <author><name>Daily Digest</name></author>
+  <link rel="self" href="{html.escape(base_url)}/opds.xml" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
+  <link rel="alternate" href="{html.escape(base_url)}/" type="text/html"/>
+  <entry>
+    <id>tag:technikerleben.github.io,{now:%Y-%m-%d}:dailydigest</id>
+    <title>{html.escape(issue_title)}</title>
+    <updated>{html.escape(updated)}</updated>
+    <author><name>Daily Digest</name></author>
+    <summary>{html.escape(summary)}</summary>
+    <link rel="http://opds-spec.org/acquisition/open-access" href="{html.escape(base_url)}/{html.escape(epub_name)}" type="application/epub+zip"/>
+  </entry>
+</feed>
+'''
+
+    page = f'''<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{html.escape(issue_title)}</title>
+  <style>
+    body {{ max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem; font: 18px/1.5 system-ui, sans-serif; color: #17232d; background: #f5f4f1; }}
+    main {{ background: #fff; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 .25rem 1.2rem #0002; }}
+    h1 {{ margin-top: 0; color: #3e5668; }}
+    .weather {{ border-block: 2px solid #3e5668; padding: 1rem 0; }}
+    a.button {{ display: block; margin: 1.25rem 0; padding: .9rem 1rem; border-radius: .7rem; color: #fff; background: #9e4e22; text-align: center; font-weight: 700; text-decoration: none; }}
+    small {{ color: #5a6a78; }}
+  </style>
+</head>
+<body>
+  <main>
+    <p>Persönliche Morgenausgabe</p>
+    <h1>{html.escape(issue_title)}</h1>
+    <p class="weather">{html.escape(weather_text)}</p>
+    <p>{len(news)} Nachrichtenmeldungen und die aktuellen Beispieltermine.</p>
+    <a class="button" href="{html.escape(epub_name)}">EPUB herunterladen</a>
+    <p><a href="opds.xml">OPDS-Katalog öffnen</a></p>
+    <small>Automatisch erstellt am {now:%d.%m.%Y} um {now:%H:%M} Uhr.</small>
+  </main>
+</body>
+</html>
+'''
+
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "opds.xml").write_text(opds, encoding="utf-8")
+    (directory / "index.html").write_text(page, encoding="utf-8")
+    (directory / ".nojekyll").write_text("", encoding="utf-8")
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.json")
@@ -318,12 +393,16 @@ def main() -> None:
     news = get_news(config["news"])
     output = Path(arguments.output)
     write_epub(output, config, now, weather, news)
+    write_publication_files(output.parent, config, now, weather, news, output.name)
 
+    base_url = config["publication"]["base_url"].rstrip("/")
     manifest = {
         "date": now.date().isoformat(),
         "generated_at": now.isoformat(timespec="seconds"),
         "file": output.name,
         "size": output.stat().st_size,
+        "epub_url": f"{base_url}/{output.name}",
+        "opds_url": f"{base_url}/opds.xml",
     }
     (output.parent / "latest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Erstellt: {output} ({output.stat().st_size} Bytes)")
