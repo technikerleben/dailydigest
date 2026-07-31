@@ -1,5 +1,6 @@
 name: Daily EPUB
 
+# GitHub Pages wird nach jedem relevanten Commit und täglich neu veröffentlicht.
 on:
   workflow_dispatch:
   schedule:
