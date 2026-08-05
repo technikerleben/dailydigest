@@ -554,9 +554,9 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
         summary = f'<p>{html.escape(item["summary"])}</p>' if item["summary"] else ""
         source_prefix = "Kommunale Information · " if item.get("source_type") == "kommunal" else ""
         news_blocks.append(
-            f'{section_label}<h2{page_class}>{html.escape(item["title"])}</h2>{summary}'
+            f'<div{page_class}>{section_label}<h2>{html.escape(item["title"])}</h2>{summary}'
             f'<p class="quelle"><a href="{html.escape(item["link"], quote=True)}">'
-            f'Quelle: {html.escape(source_prefix + item["source"])}</a></p>'
+            f'Quelle: {html.escape(source_prefix + item["source"])}</a></p></div>'
         )
     if not news_blocks:
         news_blocks.append('<div class="hinweis">Heute konnten keine Nachrichten geladen werden. Die EPUB wurde trotzdem erstellt.</div>')
