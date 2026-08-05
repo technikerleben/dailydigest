@@ -11,6 +11,7 @@ import re
 import tempfile
 import urllib.request
 import uuid
+from urllib.parse import urljoin
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
@@ -92,6 +93,49 @@ def select_location(config: dict, current_date: date) -> dict:
     return config["location"]
 
 
+def summarize_day_periods(hourly: dict, day_text: str) -> list[dict]:
+    periods = (
+        ("Morgen", 6, 12),
+        ("Nachmittag", 12, 18),
+        ("Abend", 18, 24),
+    )
+    times = [datetime.fromisoformat(value) for value in hourly.get("time", [])]
+    result = []
+    for label, start_hour, end_hour in periods:
+        indices = [
+            index
+            for index, value in enumerate(times)
+            if value.date().isoformat() == day_text and start_hour <= value.hour < end_hour
+        ]
+        temperatures = [
+            hourly["temperature_2m"][index]
+            for index in indices
+            if hourly["temperature_2m"][index] is not None
+        ]
+        rain_values = [
+            hourly["precipitation_probability"][index] or 0
+            for index in indices
+        ]
+        codes = [
+            int(hourly["weather_code"][index])
+            for index in indices
+            if hourly["weather_code"][index] is not None
+        ]
+        if not temperatures or not codes:
+            continue
+        dominant_code = max(set(codes), key=lambda code: (codes.count(code), code))
+        result.append(
+            {
+                "label": label,
+                "condition": weather_code_text(dominant_code),
+                "minimum": round(min(temperatures)),
+                "maximum": round(max(temperatures)),
+                "rain": round(max(rain_values, default=0)),
+            }
+        )
+    return result
+
+
 def get_weather(location: dict) -> list[dict]:
     if location.get("route"):
         route_weather = []
@@ -108,6 +152,7 @@ def get_weather(location: dict) -> list[dict]:
     params = (
         f"latitude={location['latitude']}&longitude={location['longitude']}"
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+        "&hourly=temperature_2m,precipitation_probability,weather_code"
         f"&timezone={location['timezone']}&forecast_days=3"
     )
     data = fetch_json(f"https://api.open-meteo.com/v1/forecast?{params}")
@@ -119,6 +164,7 @@ def get_weather(location: dict) -> list[dict]:
             "maximum": round(daily["temperature_2m_max"][index]),
             "minimum": round(daily["temperature_2m_min"][index]),
             "rain": round(daily["precipitation_probability_max"][index]),
+            "periods": summarize_day_periods(data.get("hourly", {}), daily["time"][index]),
         }
         for index in range(len(daily["time"]))
     ]
@@ -136,43 +182,115 @@ def clean_text(value: str | None, limit: int = 700) -> str:
 
 
 class ArticleParagraphParser(HTMLParser):
-    """Sammelt längere Absätze aus dem eigentlichen Artikelbereich."""
+    """Sammelt Absätze aus article; main dient als Rückfallposition."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.article_depth = 0
+        self.main_depth = 0
         self.paragraph_depth = 0
         self.current: list[str] = []
-        self.paragraphs: list[str] = []
+        self.current_target = ""
+        self.article_paragraphs: list[str] = []
+        self.main_paragraphs: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "article":
+        if tag == "main":
+            self.main_depth += 1
+        elif tag == "article":
             self.article_depth += 1
-        elif tag == "p" and self.article_depth:
+        elif tag == "p" and (self.article_depth or self.main_depth):
             self.paragraph_depth += 1
             if self.paragraph_depth == 1:
                 self.current = []
+                self.current_target = "article" if self.article_depth else "main"
 
     def handle_data(self, data: str) -> None:
-        if self.article_depth and self.paragraph_depth:
+        if self.paragraph_depth:
             self.current.append(data)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "p" and self.article_depth and self.paragraph_depth:
+        if tag == "p" and self.paragraph_depth:
             self.paragraph_depth -= 1
             if self.paragraph_depth == 0:
                 paragraph = clean_text(" ".join(self.current), 10000)
-                if len(paragraph) >= 70 and paragraph not in self.paragraphs:
-                    self.paragraphs.append(paragraph)
+                target = self.article_paragraphs if self.current_target == "article" else self.main_paragraphs
+                if len(paragraph) >= 70 and paragraph not in target:
+                    target.append(paragraph)
                 self.current = []
         elif tag == "article" and self.article_depth:
             self.article_depth -= 1
+        elif tag == "main" and self.main_depth:
+            self.main_depth -= 1
+
+
+class ListingLinkParser(HTMLParser):
+    """Extrahiert passende Nachrichtenlinks aus einer Übersichtsseite."""
+
+    def __init__(self, base_url: str, pattern: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.base_url = base_url
+        self.pattern = re.compile(pattern)
+        self.current_href: str | None = None
+        self.current_text: list[str] = []
+        self.links: list[dict] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a" or self.current_href is not None:
+            return
+        attributes = dict(attrs)
+        if attributes.get("href"):
+            self.current_href = urljoin(self.base_url, attributes["href"])
+            self.current_text = []
+
+    def handle_data(self, data: str) -> None:
+        if self.current_href is not None:
+            self.current_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != "a" or self.current_href is None:
+            return
+        title = clean_text(" ".join(self.current_text), 180)
+        url = self.current_href
+        if len(title) >= 18 and self.pattern.search(url):
+            item = {"title": title, "link": url}
+            if item not in self.links:
+                self.links.append(item)
+        self.current_href = None
+        self.current_text = []
 
 
 def extract_article_text(payload: bytes, limit: int = 1800) -> str:
     parser = ArticleParagraphParser()
     parser.feed(payload.decode("utf-8", errors="replace"))
-    return clean_text(" ".join(parser.paragraphs), limit)
+    paragraphs = parser.article_paragraphs or parser.main_paragraphs
+    return clean_text(" ".join(paragraphs), limit)
+
+
+def extract_publication_date(payload: bytes) -> date | None:
+    text = payload.decode("utf-8", errors="replace")
+    patterns = (
+        r'(?:datePublished|article:published_time)[^0-9]{0,20}(\d{4}-\d{2}-\d{2})',
+        r'<time[^>]+datetime=["\'](\d{4}-\d{2}-\d{2})',
+        r'(?:Stand:?\s*)?(\d{2}\.\d{2}\.\d{4})',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        value = match.group(1)
+        try:
+            return date.fromisoformat(value) if "-" in value else datetime.strptime(value, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+    return None
+
+
+def parse_listing(payload: bytes, url: str, pattern: str) -> list[dict]:
+    parser = ListingLinkParser(url, pattern)
+    parser.feed(payload.decode("utf-8", errors="replace"))
+    return parser.links
+
 
 
 def first_text(element: ET.Element, names: tuple[str, ...]) -> str:
@@ -211,14 +329,14 @@ def parse_feed(payload: bytes, source: str, summary_limit: int = 700) -> list[di
     return parsed
 
 
-def get_news(news_config: dict) -> list[dict]:
+def get_feed_news(news_config: dict) -> list[dict]:
     collected: list[dict] = []
     seen: set[str] = set()
-    summary_limit = int(news_config.get("summary_length", 700))
+    summary_limit = int(news_config.get("summary_length", 1400))
     for feed in news_config.get("feeds", []):
         try:
             entries = parse_feed(fetch_bytes(feed["url"]), feed["name"], summary_limit)
-        except Exception as exc:  # Ein einzelner Feed soll die Ausgabe nicht verhindern.
+        except Exception as exc:
             print(f"Warnung: Feed {feed['name']} nicht erreichbar: {exc}")
             continue
         for entry in entries:
@@ -226,7 +344,7 @@ def get_news(news_config: dict) -> list[dict]:
             if key not in seen:
                 seen.add(key)
                 collected.append(entry)
-    selected = collected[: int(news_config.get("max_items", 6))]
+    selected = collected[: int(news_config.get("max_items", 2))]
     if news_config.get("enrich_articles", False):
         for entry in selected:
             try:
@@ -235,7 +353,87 @@ def get_news(news_config: dict) -> list[dict]:
                     entry["summary"] = article_text
             except Exception as exc:
                 print(f'Warnung: Artikel {entry["link"]} nicht ausführlich lesbar: {exc}')
+    for entry in selected:
+        entry["section"] = news_config.get("national_title", "Deutschland und Welt")
+        entry["summary"] = clean_text(entry["summary"], summary_limit)
     return selected
+
+
+def get_web_section(section: dict, current_date: date) -> list[dict]:
+    sources = list(section.get("sources", []))
+    if section.get("rotate_sources") and sources:
+        offset = current_date.toordinal() % len(sources)
+        sources = sources[offset:] + sources[:offset]
+
+    candidates_by_source = []
+    for source in sources:
+        try:
+            candidates = parse_listing(
+                fetch_bytes(source["url"]),
+                source["url"],
+                source["article_pattern"],
+            )[: int(source.get("candidate_limit", 5))]
+            candidates_by_source.append((source, candidates))
+        except Exception as exc:
+            print(f'Warnung: Übersicht {source["name"]} nicht erreichbar: {exc}')
+
+    interleaved = []
+    max_candidates = max((len(items) for _, items in candidates_by_source), default=0)
+    for index in range(max_candidates):
+        for source, items in candidates_by_source:
+            if index < len(items):
+                interleaved.append((source, items[index]))
+
+    selected = []
+    seen_titles: set[str] = set()
+    item_limit = int(section.get("item_limit", 800))
+    max_age_days = int(section.get("max_age_days", 7))
+    for source, candidate in interleaved:
+        key = candidate["title"].casefold()
+        if key in seen_titles:
+            continue
+        seen_titles.add(key)
+        try:
+            payload = fetch_bytes(candidate["link"])
+            published = extract_publication_date(payload)
+            if published and (current_date - published).days > max_age_days:
+                continue
+            summary = extract_article_text(payload, item_limit)
+            if len(summary) < 80:
+                continue
+        except Exception as exc:
+            print(f'Warnung: Artikel {candidate["link"]} nicht lesbar: {exc}')
+            continue
+        selected.append(
+            {
+                "title": candidate["title"],
+                "summary": clean_text(summary, item_limit),
+                "link": candidate["link"],
+                "source": source["name"],
+                "section": section["title"],
+                "source_type": source.get("source_type", "journalistisch"),
+            }
+        )
+        if len(selected) >= int(section.get("max_items", 1)):
+            break
+    return selected
+
+
+def get_news(news_config: dict, current_date: date | None = None) -> list[dict]:
+    current_date = current_date or date.today()
+    collected = []
+    seen_links: set[str] = set()
+    for section in news_config.get("sections", []):
+        for entry in get_web_section(section, current_date):
+            if entry["link"] not in seen_links:
+                seen_links.add(entry["link"])
+                collected.append(entry)
+    for entry in get_feed_news(news_config):
+        if entry["link"] not in seen_links:
+            seen_links.add(entry["link"])
+            collected.append(entry)
+    return collected
+
 
 
 def xhtml(title: str, body: str) -> str:
@@ -509,7 +707,7 @@ def main() -> None:
     timezone = ZoneInfo(config["location"]["timezone"])
     now = now.astimezone(timezone)
     weather = get_weather(config["location"])
-    news = get_news(config["news"])
+    news = get_news(config["news"], now.date())
     output = Path(arguments.output)
     write_epub(output, config, now, weather, news)
     write_publication_files(output.parent, config, now, weather, news, output.name)
