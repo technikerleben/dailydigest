@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+from html.parser import HTMLParser
 import re
 import tempfile
 import urllib.request
@@ -134,6 +135,46 @@ def clean_text(value: str | None, limit: int = 700) -> str:
     return shortened + "…"
 
 
+class ArticleParagraphParser(HTMLParser):
+    """Sammelt längere Absätze aus dem eigentlichen Artikelbereich."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.article_depth = 0
+        self.paragraph_depth = 0
+        self.current: list[str] = []
+        self.paragraphs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "article":
+            self.article_depth += 1
+        elif tag == "p" and self.article_depth:
+            self.paragraph_depth += 1
+            if self.paragraph_depth == 1:
+                self.current = []
+
+    def handle_data(self, data: str) -> None:
+        if self.article_depth and self.paragraph_depth:
+            self.current.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "p" and self.article_depth and self.paragraph_depth:
+            self.paragraph_depth -= 1
+            if self.paragraph_depth == 0:
+                paragraph = clean_text(" ".join(self.current), 10000)
+                if len(paragraph) >= 70 and paragraph not in self.paragraphs:
+                    self.paragraphs.append(paragraph)
+                self.current = []
+        elif tag == "article" and self.article_depth:
+            self.article_depth -= 1
+
+
+def extract_article_text(payload: bytes, limit: int = 1800) -> str:
+    parser = ArticleParagraphParser()
+    parser.feed(payload.decode("utf-8", errors="replace"))
+    return clean_text(" ".join(parser.paragraphs), limit)
+
+
 def first_text(element: ET.Element, names: tuple[str, ...]) -> str:
     for child in element.iter():
         local_name = child.tag.rsplit("}", 1)[-1].lower()
@@ -185,7 +226,16 @@ def get_news(news_config: dict) -> list[dict]:
             if key not in seen:
                 seen.add(key)
                 collected.append(entry)
-    return collected[: int(news_config.get("max_items", 6))]
+    selected = collected[: int(news_config.get("max_items", 6))]
+    if news_config.get("enrich_articles", False):
+        for entry in selected:
+            try:
+                article_text = extract_article_text(fetch_bytes(entry["link"]), summary_limit)
+                if len(article_text) > len(entry["summary"]):
+                    entry["summary"] = article_text
+            except Exception as exc:
+                print(f'Warnung: Artikel {entry["link"]} nicht ausführlich lesbar: {exc}')
+    return selected
 
 
 def xhtml(title: str, body: str) -> str:
