@@ -14,6 +14,8 @@ from generate import (
     build_pages,
     clean_text,
     extract_article_text,
+    parse_listing,
+    summarize_day_periods,
     select_location,
     weather_code_text,
     write_epub,
@@ -46,6 +48,38 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn("erster Absatz", text)
         self.assertIn("zweiter laengerer Absatz", text)
         self.assertNotIn("Navigation", text)
+
+    def test_weather_day_periods(self):
+        hourly = {
+            "time": [f"2026-08-05T{hour:02d}:00" for hour in range(24)],
+            "temperature_2m": [10 + hour / 2 for hour in range(24)],
+            "precipitation_probability": list(range(24)),
+            "weather_code": [1] * 6 + [2] * 6 + [3] * 6 + [61] * 6,
+        }
+        periods = summarize_day_periods(hourly, "2026-08-05")
+        self.assertEqual(
+            [period["label"] for period in periods],
+            ["Morgen", "Nachmittag", "Abend"],
+        )
+        self.assertEqual(periods[0]["minimum"], 13)
+        self.assertEqual(periods[2]["condition"], "leichter Regen")
+
+    def test_listing_keeps_only_article_links(self):
+        payload = b"""
+        <main>
+          <a href="/nrw/test-artikel-100.html">
+            <span>Eine ausreichend lange regionale Meldung</span>
+          </a>
+          <a href="/navigation.html">Navigation</a>
+        </main>
+        """
+        links = parse_listing(
+            payload,
+            "https://www1.wdr.de/start/",
+            r"^https://www1\\.wdr\\.de/nrw/.+-\\d+\\.html$",
+        )
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["title"], "Eine ausreichend lange regionale Meldung")
 
     def test_location_schedule(self):
         config = {
