@@ -10,7 +10,14 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from generate import clean_text, weather_code_text, write_epub, write_publication_files
+from generate import (
+    build_pages,
+    clean_text,
+    select_location,
+    weather_code_text,
+    write_epub,
+    write_publication_files,
+)
 
 
 class GeneratorTests(unittest.TestCase):
@@ -25,6 +32,47 @@ class GeneratorTests(unittest.TestCase):
         summary = clean_text("Nachricht " * 100)
         self.assertLessEqual(len(summary), 700)
         self.assertTrue(summary.endswith("…"))
+
+    def test_location_schedule(self):
+        config = {
+            "location": {"name": "Wetter (Ruhr)"},
+            "location_schedule": [
+                {"through": "2026-08-07", "location": {"name": "Kappeln"}},
+                {
+                    "from": "2026-08-08",
+                    "through": "2026-08-08",
+                    "location": {"name": "Reisetag"},
+                },
+                {
+                    "from": "2026-08-09",
+                    "through": "2026-08-16",
+                    "location": {"name": "Saltum Strand"},
+                },
+            ],
+        }
+        self.assertEqual(select_location(config, datetime(2026, 8, 7).date())["name"], "Kappeln")
+        self.assertEqual(select_location(config, datetime(2026, 8, 8).date())["name"], "Reisetag")
+        self.assertEqual(select_location(config, datetime(2026, 8, 9).date())["name"], "Saltum Strand")
+        self.assertEqual(select_location(config, datetime(2026, 8, 17).date())["name"], "Wetter (Ruhr)")
+
+    def test_calendar_can_be_disabled(self):
+        config = {
+            "title": "Testausgabe",
+            "location": {"name": "Saltum Strand"},
+            "calendar": {"enabled": False, "appointments": []},
+        }
+        weather = [
+            {
+                "date": "2026-08-09",
+                "condition": "klar",
+                "maximum": 20,
+                "minimum": 10,
+                "rain": 5,
+            }
+        ]
+        pages = build_pages(config, datetime(2026, 8, 9, 5, 15), weather, [])
+        self.assertNotIn("calendar.xhtml", pages)
+        self.assertNotIn("Termine", pages["cover.xhtml"])
 
     def test_epub_structure(self):
         config = {
