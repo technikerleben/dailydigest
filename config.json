@@ -58,8 +58,8 @@
     }
   ],
   "news": {
-    "max_items": 6,
-    "summary_length": 1800,
+    "max_items": 2,
+    "summary_length": 1400,
     "feeds": [
       {
         "name": "tagesschau.de",
@@ -70,7 +70,81 @@
         "url": "https://www.tagesschau.de/wissen/index~rss2.xml"
       }
     ],
-    "enrich_articles": true
+    "enrich_articles": true,
+    "national_title": "Deutschland und Welt",
+    "sections": [
+      {
+        "id": "region",
+        "title": "Region im Fokus",
+        "max_items": 1,
+        "item_limit": 1600,
+        "max_age_days": 4,
+        "sources": [
+          {
+            "name": "WDR Ennepe-Ruhr-Kreis",
+            "url": "https://www1.wdr.de/nrw/ruhrgebiet/ennepe-ruhr-kreis/index.html",
+            "article_pattern": "^https://www1\\.wdr\\.de/nrw/ruhrgebiet/ennepe-ruhr-kreis/.+-\\d+\\.html$",
+            "candidate_limit": 8,
+            "source_type": "journalistisch"
+          },
+          {
+            "name": "WDR Ruhrgebiet",
+            "url": "https://www1.wdr.de/nrw/ruhrgebiet/index.html",
+            "article_pattern": "^https://www1\\.wdr\\.de/nrw/ruhrgebiet/.+-.+\\d+\\.html$",
+            "candidate_limit": 8,
+            "source_type": "journalistisch"
+          }
+        ]
+      },
+      {
+        "id": "nrw",
+        "title": "Nordrhein-Westfalen",
+        "max_items": 1,
+        "item_limit": 1400,
+        "max_age_days": 4,
+        "sources": [
+          {
+            "name": "WDR Nordrhein-Westfalen",
+            "url": "https://www1.wdr.de/politik/politik-in-nrw/index.html",
+            "article_pattern": "^https://www1\\.wdr\\.de/politik/.+-\\d+\\.html$",
+            "candidate_limit": 10,
+            "source_type": "journalistisch"
+          }
+        ]
+      },
+      {
+        "id": "local",
+        "title": "Vor Ort",
+        "max_items": 2,
+        "item_limit": 450,
+        "max_age_days": 14,
+        "rotate_sources": true,
+        "sources": [
+          {
+            "name": "Stadt Wetter (Ruhr)",
+            "url": "https://www.stadt-wetter.de/pressemitteilungen/",
+            "article_pattern": "^https://www\\.stadt-wetter\\.de/\\d{4}/\\d{2}/\\d{2}/[^/]+/$",
+            "candidate_limit": 5,
+            "source_type": "kommunal"
+          },
+          {
+            "name": "Stadt Witten",
+            "url": "https://www.witten.de/portal/pressemitteilungen/uebersicht-0-37500.html",
+            "article_pattern": "^https://www\\.witten\\.de/portal/pressemitteilungen/(?!uebersicht)[^?#]+\\.html$",
+            "candidate_limit": 5,
+            "source_type": "kommunal"
+          },
+          {
+            "name": "Stadt Dortmund",
+            "url": "https://www.dortmund.de/newsroom/nachrichten/",
+            "article_pattern": "^https://www\\.dortmund\\.de/newsroom/nachrichten-dortmund\\.de/[^?#]+\\.html$",
+            "candidate_limit": 5,
+            "source_type": "kommunal"
+          }
+        ]
+      }
+    ],
+    "total_character_budget": 6700
   },
   "calendar": {
     "enabled": false,
