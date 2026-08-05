@@ -469,10 +469,18 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
     else:
         hero_temperature = f'{first["maximum"]} °C'
         hero_condition = first["condition"].capitalize()
+        period_lines = "".join(
+            f'<p class="kompakt"><strong>{html.escape(period["label"])}</strong>: '
+            f'{html.escape(period["condition"].capitalize())}, '
+            f'{period["minimum"]} bis {period["maximum"]} °C, '
+            f'Regen bis {period["rain"]} %.</p>'
+            for period in first.get("periods", [])
+        )
         overview_weather = (
             f'<p>{html.escape(first["condition"].capitalize())}, '
             f'{first["minimum"]} bis {first["maximum"]} °C. '
             f'Regenwahrscheinlichkeit bis {first["rain"]} %.</p>'
+            + period_lines
         )
 
     appointment_lines = "".join(
@@ -506,9 +514,19 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
             if (item_label := day.get("place"))
             else f"{weekday[parsed_date.weekday()]}, {parsed_date.day}. {months[parsed_date.month]}"
         )
+        period_details = ""
+        if not day.get("place"):
+            period_details = "".join(
+                f'<p class="kompakt"><strong>{html.escape(period["label"])}</strong>: '
+                f'{html.escape(period["condition"].capitalize())}, '
+                f'{period["minimum"]} bis {period["maximum"]} °C, '
+                f'Regen bis {period["rain"]} %.</p>'
+                for period in day.get("periods", [])
+            )
         weather_blocks.append(
             f'<h2>{html.escape(label)}</h2><p>{html.escape(day["condition"].capitalize())}. '
             f'{day["minimum"]} bis {day["maximum"]} °C. Regenwahrscheinlichkeit bis {day["rain"]} %.</p>'
+            + period_details
         )
     weather_page = xhtml(
         f'Wetter für {config["location"]["name"]}',
@@ -523,12 +541,22 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
     )
 
     news_blocks = []
+    current_section = None
     for index, item in enumerate(news):
         page_class = ' class="seitenwechsel"' if index else ""
+        section = item.get("section", "Nachrichten")
+        section_label = (
+            f'<p class="kicker">{html.escape(section)}</p>'
+            if section != current_section
+            else ""
+        )
+        current_section = section
         summary = f'<p>{html.escape(item["summary"])}</p>' if item["summary"] else ""
+        source_prefix = "Kommunale Information · " if item.get("source_type") == "kommunal" else ""
         news_blocks.append(
-            f'<h2{page_class}>{html.escape(item["title"])}</h2>{summary}'
-            f'<p class="quelle"><a href="{html.escape(item["link"], quote=True)}">Quelle: {html.escape(item["source"])}</a></p>'
+            f'{section_label}<h2{page_class}>{html.escape(item["title"])}</h2>{summary}'
+            f'<p class="quelle"><a href="{html.escape(item["link"], quote=True)}">'
+            f'Quelle: {html.escape(source_prefix + item["source"])}</a></p>'
         )
     if not news_blocks:
         news_blocks.append('<div class="hinweis">Heute konnten keine Nachrichten geladen werden. Die EPUB wurde trotzdem erstellt.</div>')
@@ -541,7 +569,7 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
         "Quellen und Hinweise",
         '<p class="kicker">Zum Tagesblatt</p><h1>Quellen und Hinweise</h1>'
         '<h2>Wetter</h2><p>Prognosedaten von Open-Meteo.</p>'
-        '<h2>Nachrichten</h2><p>Ausführlichere Anrisse aus den konfigurierten RSS-Feeds. Die Überschriften verlinken auf die Originalmeldungen.</p>'
+        '<h2>Nachrichten</h2><p>Regionale und landesweite Meldungen stammen vor allem vom WDR. Ergänzend erscheinen deutlich gekennzeichnete kommunale Informationen aus Dortmund, Witten und Wetter (Ruhr). Deutschland- und Weltmeldungen stammen von tagesschau.de. Alle Überschriften verlinken auf die Originalquelle.</p>'
         + ('<h2>Termine</h2><p>Die aktuelle Projektversion verwendet ausschließlich fiktive Termine.</p>' if calendar_enabled else ""),
     )
     pages = {
