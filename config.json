@@ -59,7 +59,7 @@
   ],
   "news": {
     "max_items": 6,
-    "summary_length": 700,
+    "summary_length": 1800,
     "feeds": [
       {
         "name": "tagesschau.de",
@@ -69,7 +69,8 @@
         "name": "tagesschau Wissen",
         "url": "https://www.tagesschau.de/wissen/index~rss2.xml"
       }
-    ]
+    ],
+    "enrich_articles": true
   },
   "calendar": {
     "enabled": false,
