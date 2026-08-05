@@ -76,7 +76,7 @@ class GeneratorTests(unittest.TestCase):
         links = parse_listing(
             payload,
             "https://www1.wdr.de/start/",
-            r"^https://www1\\.wdr\\.de/nrw/.+-\\d+\\.html$",
+            r"^https://www1\.wdr\.de/nrw/.+-\d+\.html$",
         )
         self.assertEqual(len(links), 1)
         self.assertEqual(links[0]["title"], "Eine ausreichend lange regionale Meldung")
