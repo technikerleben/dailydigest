@@ -58,8 +58,8 @@
     }
   ],
   "news": {
-    "max_items": 2,
-    "summary_length": 1400,
+    "max_items": 6,
+    "summary_length": 1800,
     "feeds": [
       {
         "name": "tagesschau.de",
@@ -143,8 +143,7 @@
           }
         ]
       }
-    ],
-    "total_character_budget": 6700
+    ]
   },
   "calendar": {
     "enabled": false,
