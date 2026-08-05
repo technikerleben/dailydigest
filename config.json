@@ -6,6 +6,57 @@
     "longitude": 7.3928,
     "timezone": "Europe/Berlin"
   },
+  "location_schedule": [
+    {
+      "through": "2026-08-07",
+      "location": {
+        "name": "Kappeln an der Schlei",
+        "latitude": 54.6592,
+        "longitude": 9.9311,
+        "timezone": "Europe/Berlin"
+      }
+    },
+    {
+      "from": "2026-08-08",
+      "through": "2026-08-08",
+      "location": {
+        "name": "Reisetag durch Dänemark",
+        "timezone": "Europe/Copenhagen",
+        "route": [
+          {
+            "name": "Kolding",
+            "latitude": 55.4904,
+            "longitude": 9.47216
+          },
+          {
+            "name": "Aarhus",
+            "latitude": 56.15674,
+            "longitude": 10.21076
+          },
+          {
+            "name": "Aalborg",
+            "latitude": 57.048,
+            "longitude": 9.9187
+          },
+          {
+            "name": "Saltum Strand",
+            "latitude": 57.29185,
+            "longitude": 9.63844
+          }
+        ]
+      }
+    },
+    {
+      "from": "2026-08-09",
+      "through": "2026-08-16",
+      "location": {
+        "name": "Saltum Strand",
+        "latitude": 57.29185,
+        "longitude": 9.63844,
+        "timezone": "Europe/Copenhagen"
+      }
+    }
+  ],
   "news": {
     "max_items": 6,
     "summary_length": 700,
@@ -21,21 +72,9 @@
     ]
   },
   "calendar": {
-    "mode": "demo",
-    "appointments": [
-      {
-        "time": "08:15",
-        "title": "Unterrichtsmaterial vorbereiten"
-      },
-      {
-        "time": "10:30",
-        "title": "SRL-Projektbesprechung"
-      },
-      {
-        "time": "15:00",
-        "title": "Lernkarten überarbeiten"
-      }
-    ]
+    "enabled": false,
+    "mode": "disabled",
+    "appointments": []
   },
   "publication": {
     "base_url": "https://technikerleben.github.io/dailydigest"
