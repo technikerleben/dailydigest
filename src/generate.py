@@ -11,7 +11,7 @@ import tempfile
 import urllib.request
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from zoneinfo import ZoneInfo
@@ -81,7 +81,29 @@ def weather_code_text(code: int) -> str:
     return WEATHER_CODES.get(int(code), "wechselhaft")
 
 
+def select_location(config: dict, current_date: date) -> dict:
+    """Wählt anhand des Datums einen vorübergehenden Wetterort."""
+    for rule in config.get("location_schedule", []):
+        start = date.fromisoformat(rule.get("from", "0001-01-01"))
+        end = date.fromisoformat(rule.get("through", "9999-12-31"))
+        if start <= current_date <= end:
+            return rule["location"]
+    return config["location"]
+
+
 def get_weather(location: dict) -> list[dict]:
+    if location.get("route"):
+        route_weather = []
+        for stop in location["route"]:
+            stop_location = {
+                **stop,
+                "timezone": location.get("timezone", "Europe/Copenhagen"),
+            }
+            forecast = get_weather(stop_location)[0]
+            forecast["place"] = stop["name"]
+            route_weather.append(forecast)
+        return route_weather
+
     params = (
         f"latitude={location['latitude']}&longitude={location['longitude']}"
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
@@ -180,7 +202,30 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
     months = ("", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember")
     date_text = f"{weekday[now.weekday()]}, {now.day}. {months[now.month]} {now.year}"
     first = weather[0]
-    appointments = config["calendar"].get("appointments", [])
+    route_weather = any("place" in item for item in weather)
+    calendar_enabled = config.get("calendar", {}).get("enabled", True)
+    appointments = config.get("calendar", {}).get("appointments", []) if calendar_enabled else []
+
+    if route_weather:
+        route_minimum = min(item["minimum"] for item in weather)
+        route_maximum = max(item["maximum"] for item in weather)
+        route_rain = max(item["rain"] for item in weather)
+        hero_temperature = f"{route_minimum}–{route_maximum} °C"
+        hero_condition = f"Streckenwetter · Regenrisiko bis {route_rain} %"
+        overview_weather = "".join(
+            f'<p class="kompakt"><strong>{html.escape(item["place"])}</strong>: '
+            f'{html.escape(item["condition"].capitalize())}, {item["minimum"]} bis {item["maximum"]} °C, '
+            f'Regen bis {item["rain"]} %.</p>'
+            for item in weather
+        )
+    else:
+        hero_temperature = f'{first["maximum"]} °C'
+        hero_condition = first["condition"].capitalize()
+        overview_weather = (
+            f'<p>{html.escape(first["condition"].capitalize())}, '
+            f'{first["minimum"]} bis {first["maximum"]} °C. '
+            f'Regenwahrscheinlichkeit bis {first["rain"]} %.</p>'
+        )
 
     appointment_lines = "".join(
         f'<p class="kompakt"><span class="zeit">{html.escape(item["time"])}</span> {html.escape(item["title"])}</p>'
@@ -190,25 +235,29 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
     cover = xhtml(
         config["title"],
         f'<p class="kicker">Persönliche Morgenausgabe</p><h1>{html.escape(config["title"])}</h1>'
-        f'<p class="datum">{html.escape(date_text)}</p><div class="hero"><span class="gross">{first["maximum"]} °C</span>'
-        f'<span class="klein">{html.escape(first["condition"].capitalize())}</span></div>'
-        f'<p><strong>Termine:</strong> {len(appointments)}</p><p><strong>Nachrichten:</strong> {len(news)}</p>'
+        f'<p class="datum">{html.escape(date_text)}</p><div class="hero"><span class="gross">{html.escape(hero_temperature)}</span>'
+        f'<span class="klein">{html.escape(hero_condition)}</span></div>'
+        + (f'<p><strong>Termine:</strong> {len(appointments)}</p>' if calendar_enabled else "")
+        + f'<p><strong>Nachrichten:</strong> {len(news)}</p>'
         f'<p class="quelle">Erstellt um {now:%H:%M} Uhr</p>',
     )
 
     overview = xhtml(
         "Heute auf einen Blick",
         f'<p class="kicker">{html.escape(date_text)}</p><h1>Heute auf einen Blick</h1>'
-        f'<h2>Wetter</h2><p>{html.escape(first["condition"].capitalize())}, {first["minimum"]} bis {first["maximum"]} °C. '
-        f'Regenwahrscheinlichkeit bis {first["rain"]} %.</p><h2>Termine</h2>{appointment_lines}'
-        + (f'<h2>Wichtigste Meldung</h2><p>{html.escape(news[0]["title"])}</p>' if news else '<h2>Nachrichten</h2><p>Der Nachrichtenfeed war nicht erreichbar.</p>')
-        + '<p class="quelle">Die Termine dieser Version sind fiktive Beispiele.</p>',
+        f'<h2>Wetter</h2>{overview_weather}'
+        + (f'<h2>Termine</h2>{appointment_lines}' if calendar_enabled else "")
+        + (f'<h2>Wichtigste Meldung</h2><p>{html.escape(news[0]["title"])}</p>' if news else '<h2>Nachrichten</h2><p>Der Nachrichtenfeed war nicht erreichbar.</p>'),
     )
 
     weather_blocks = []
     for day in weather:
         parsed_date = datetime.fromisoformat(day["date"])
-        label = f"{weekday[parsed_date.weekday()]}, {parsed_date.day}. {months[parsed_date.month]}"
+        label = (
+            item_label
+            if (item_label := day.get("place"))
+            else f"{weekday[parsed_date.weekday()]}, {parsed_date.day}. {months[parsed_date.month]}"
+        )
         weather_blocks.append(
             f'<h2>{html.escape(label)}</h2><p>{html.escape(day["condition"].capitalize())}. '
             f'{day["minimum"]} bis {day["maximum"]} °C. Regenwahrscheinlichkeit bis {day["rain"]} %.</p>'
@@ -245,16 +294,18 @@ def build_pages(config: dict, now: datetime, weather: list[dict], news: list[dic
         '<p class="kicker">Zum Tagesblatt</p><h1>Quellen und Hinweise</h1>'
         '<h2>Wetter</h2><p>Prognosedaten von Open-Meteo.</p>'
         '<h2>Nachrichten</h2><p>Ausführlichere Anrisse aus den konfigurierten RSS-Feeds. Die Überschriften verlinken auf die Originalmeldungen.</p>'
-        '<h2>Termine</h2><p>Die aktuelle Projektversion verwendet ausschließlich fiktive Termine.</p>',
+        + ('<h2>Termine</h2><p>Die aktuelle Projektversion verwendet ausschließlich fiktive Termine.</p>' if calendar_enabled else ""),
     )
-    return {
+    pages = {
         "cover.xhtml": cover,
         "overview.xhtml": overview,
         "weather.xhtml": weather_page,
-        "calendar.xhtml": calendar_page,
-        "news.xhtml": news_page,
-        "sources.xhtml": sources,
     }
+    if calendar_enabled:
+        pages["calendar.xhtml"] = calendar_page
+    pages["news.xhtml"] = news_page
+    pages["sources.xhtml"] = sources
+    return pages
 
 
 def write_epub(output: Path, config: dict, now: datetime, weather: list[dict], news: list[dict]) -> None:
@@ -266,9 +317,17 @@ def write_epub(output: Path, config: dict, now: datetime, weather: list[dict], n
         for index, name in enumerate(pages, 1)
     )
     spine = "".join(f'<itemref idref="p{index}"/>' for index in range(1, len(pages) + 1))
+    nav_titles = {
+        "cover.xhtml": "Titelseite",
+        "overview.xhtml": "Heute",
+        "weather.xhtml": "Wetter",
+        "calendar.xhtml": "Termine",
+        "news.xhtml": "Nachrichten",
+        "sources.xhtml": "Quellen",
+    }
     nav_items = "".join(
-        f'<li><a href="{name}">{html.escape(title)}</a></li>'
-        for name, title in zip(pages, ("Titelseite", "Heute", "Wetter", "Termine", "Nachrichten", "Quellen"))
+        f'<li><a href="{name}">{html.escape(nav_titles[name])}</a></li>'
+        for name in pages
     )
     opf = f'''<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id" xml:lang="de">
@@ -319,12 +378,19 @@ def write_publication_files(
     updated = now.isoformat(timespec="seconds")
     date_text = now.strftime("%d.%m.%Y")
     issue_title = f'{config["title"]} – {date_text}'
-    weather_text = (
-        f'{weather[0]["condition"].capitalize()}, '
-        f'{weather[0]["minimum"]} bis {weather[0]["maximum"]} °C'
-        if weather
-        else "Wetterdaten nicht verfügbar"
-    )
+    if weather and any("place" in item for item in weather):
+        weather_text = (
+            f'Streckenwetter: {min(item["minimum"] for item in weather)} bis '
+            f'{max(item["maximum"] for item in weather)} °C, '
+            f'Regenrisiko bis {max(item["rain"] for item in weather)} %'
+        )
+    elif weather:
+        weather_text = (
+            f'{weather[0]["condition"].capitalize()}, '
+            f'{weather[0]["minimum"]} bis {weather[0]["maximum"]} °C'
+        )
+    else:
+        weather_text = "Wetterdaten nicht verfügbar"
     summary = f"{weather_text}. {len(news)} Nachrichtenmeldungen."
 
     opds = f'''<?xml version="1.0" encoding="UTF-8"?>
@@ -366,7 +432,7 @@ def write_publication_files(
     <p>Persönliche Morgenausgabe</p>
     <h1>{html.escape(issue_title)}</h1>
     <p class="weather">{html.escape(weather_text)}</p>
-    <p>{len(news)} Nachrichtenmeldungen und die aktuellen Beispieltermine.</p>
+    <p>{len(news)} Nachrichtenmeldungen.</p>
     <a class="button" href="{html.escape(epub_name)}">EPUB herunterladen</a>
     <p><a href="opds.xml">OPDS-Katalog öffnen</a></p>
     <small>Automatisch erstellt am {now:%d.%m.%Y} um {now:%H:%M} Uhr.</small>
@@ -389,6 +455,9 @@ def main() -> None:
     config = json.loads(Path(arguments.config).read_text(encoding="utf-8"))
     timezone = ZoneInfo(config["location"]["timezone"])
     now = datetime.now(timezone)
+    config["location"] = select_location(config, now.date())
+    timezone = ZoneInfo(config["location"]["timezone"])
+    now = now.astimezone(timezone)
     weather = get_weather(config["location"])
     news = get_news(config["news"])
     output = Path(arguments.output)
