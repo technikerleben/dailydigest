@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from generate import (
     build_pages,
     clean_text,
+    extract_article_text,
     select_location,
     weather_code_text,
     write_epub,
@@ -32,6 +33,19 @@ class GeneratorTests(unittest.TestCase):
         summary = clean_text("Nachricht " * 100)
         self.assertLessEqual(len(summary), 700)
         self.assertTrue(summary.endswith("…"))
+
+    def test_extracts_longer_article_text(self):
+        payload = b"""
+        <html><body><nav><p>Navigation should be ignored completely.</p></nav>
+        <article>
+          <p>Dies ist ein ausfuehrlicher erster Absatz mit genuegend Inhalt, damit er als Teil des Nachrichtentextes erkannt wird.</p>
+          <p>Dies ist ein zweiter laengerer Absatz mit weiteren wichtigen Hintergruenden und Zusammenhaengen fuer die Leserinnen und Leser.</p>
+        </article></body></html>
+        """
+        text = extract_article_text(payload, 500)
+        self.assertIn("erster Absatz", text)
+        self.assertIn("zweiter laengerer Absatz", text)
+        self.assertNotIn("Navigation", text)
 
     def test_location_schedule(self):
         config = {
